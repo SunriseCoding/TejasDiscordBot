@@ -4,7 +4,7 @@ I had set my eyes upon Discord and thought, hmm... can I make it, so I did some 
 
 And I first followed the official guide for it, then took another guide from a different website which was way easier, phew! So, I managed to make this.
 
-So, here, I introduce you Tejas' Discord Bot! It has a whoppin' 2 commands! Which can run absolutely nothing... yea it is bad, but don't worry that much. Keep checking this Repository and you can find updates to this.
+So, here, I introduce you Tejas' Discord Bot! It has a whoppin' 5 commands (One doesn't work for some reason)! Which can run absolutely nothing... yea it is bad, but don't worry that much. Keep checking this Repository and you can find updates to this.
 
 I almost forgot, here's the bot link to download the bot which will run on Discord, my og bot: https://discord.com/oauth2/authorize?client_id=1423298624657555536
 
