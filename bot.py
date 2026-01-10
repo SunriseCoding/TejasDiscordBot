@@ -85,11 +85,11 @@ def checkIfSettingsChannel(interaction: discord.Interaction) -> bool:
         return False
 
 #For easily replying to messages
-async def reply(interaction: discord.Interaction, text: str) -> None: #Can only be used once
-    await interaction.response.send_message(text)
-
-async def followUp(interaction: discord.Interaction, text: str) -> None: #Can be used infinite number of times (Only after the initial reply)
-    await interaction.followup.send(text)
+async def reply(interaction: discord.Interaction, text: str) -> None:
+    if interaction.response.is_done() == False:    
+        await interaction.response.send_message(text)
+    else:
+        await interaction.followup.send(text)
 
 #Making the hello function
 async def hello(interaction: discord.Interaction) -> None:
@@ -100,6 +100,7 @@ async def test(interaction: discord.Interaction) -> None:
     await reply(interaction, "I can't remove this command or this bot will break!")
 
 #Making the clear function
+@bot.tree.command(name="cleanup", description="Cleans up the channel or the number of messages")
 async def clear(interaction: discord.Interaction, object: str, val: str) -> None:
     print("Ran this command")
     if checkIfOwner(interaction) == False:
@@ -125,10 +126,21 @@ async def clear(interaction: discord.Interaction, object: str, val: str) -> None
 
     elif object == "messages":
         try:
-            await interaction.channel.purge(limit=int(val)) #type: ignore
-            await reply(interaction, "Deleted messages.")
-        except ValueError:
-            await reply(interaction, "Make sure to put the value as an integer more than 0!")
+            try:
+                await interaction.response.defer(ephemeral=True)
+
+                amount: int = int(val)
+
+                if amount <= 0:
+                    raise ValueError
+
+                await interaction.channel.purge(limit=int(val)) #type: ignore
+                await reply(interaction, "Deleted messages.")
+            except ValueError:
+                await reply(interaction, "Make sure to put the value as an integer more than 0!")
+        except Exception as e:
+            print("Maybe the interaction got deleted?")
+            print(f"IDK man, take the exception {e}")
 
     else:
         await reply(interaction, f"No object {object} found!")
@@ -318,7 +330,6 @@ async def setup(interaction: discord.Interaction):
 makeSlashCommand("hello", "Say hi!", hello) #type: ignore
 makeSlashCommand("test", "I HATE YOU discord_example_app!!!", test) #type: ignore
 makeSlashCommand("setupbot", "Set the bot up so that you can destroy it!", setup) #type: ignore
-makeSlashCommand("cleanup", "Cleans up the channel or the number of messages", clear)
 
 #Main stuff
 @bot.event
