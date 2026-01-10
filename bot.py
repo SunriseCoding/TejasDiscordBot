@@ -9,9 +9,15 @@ import json
 import configparser
 
 #Get values from variables
-load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-PUBLIC_KEY = os.getenv("PUBLIC_KEY")
+
+try:
+    load_dotenv()
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN") #type: ignore
+    PUBLIC_KEY: str = os.getenv("PUBLIC_KEY") #type: ignore
+except FileNotFoundError:
+    print("Please add a .env file to the same directory as this and add BOT_TOKEN and PUBLIC_KEY in the .env file.")
+    print("Exiting program due to FileNotFoundError")
+    raise(FileNotFoundError)
 
 #Define Intents
 intents = discord.Intents.default()
@@ -26,10 +32,11 @@ config = configparser.ConfigParser()
 config.read('config.properties')
 
 #Pre-Make Variables
-banned_words = []
+banned_words: list = []
 filter = False
 banned_wordsPATH = ""
 global owner
+owner: int = int(config.get("DEFAULT", "owner", fallback="0"))
 configSettingsChannelID = config.get('DEFAULT', 'settingsChannelID')
 
 if configSettingsChannelID == "None":
@@ -52,51 +59,95 @@ if config.get('DEFAULT', 'filtering') == "True":
 #Fry
 
 #A easier function for making slash commands
-def makeSlashCommand(name, description, function):
+def makeSlashCommand(name: str, description: str, functioon) -> None:
      @bot.tree.command(name=name, description=description)
      async def command(interaction: discord.Interaction):
-          await function(interaction)
+          await functioon(interaction)
 
 #Check if message was sent be owner
-def checkIfOwner(interaction: discord.Interaction):
-    member: discord.member = interaction.user
+def checkIfOwner(interaction: discord.Interaction) -> bool:
+    global owner
+    member: discord.member = interaction.user #type: ignore
 
-    if member.id == owner.id:
+    if owner != 0:
+        owner = interaction.guild.owner.id #type: ignore
+        print("Defined owner")
+
+    if member.id == owner: #type: ignore
         return True
     else:
         return False
     
-def checkIfSettingsChannel(interaction: discord.Interaction):
+def checkIfSettingsChannel(interaction: discord.Interaction) -> bool:
     if int(config.get("DEFAULT", "settingsChannelID")) == interaction.channel_id:
         return True
     else:
         return False
 
 #For easily replying to messages
-async def reply(interaction: discord.Interaction, text):
+async def reply(interaction: discord.Interaction, text: str) -> None: #Can only be used once
     await interaction.response.send_message(text)
 
+async def followUp(interaction: discord.Interaction, text: str) -> None: #Can be used infinite number of times (Only after the initial reply)
+    await interaction.followup.send(text)
+
 #Making the hello function
-async def hello(interaction: discord.Interaction):
+async def hello(interaction: discord.Interaction) -> None:
     await reply(interaction, "Hi!")
 
 #Making the dreaded test function
-async def test(interaction: discord.Interaction):
+async def test(interaction: discord.Interaction) -> None:
     await reply(interaction, "I can't remove this command or this bot will break!")
+
+#Making the clear function
+async def clear(interaction: discord.Interaction, object: str, val: str) -> None:
+    print("Ran this command")
+    if checkIfOwner(interaction) == False:
+        print("Not owner!")
+        return None
+    
+    if object == "channel":
+        if val == "~":
+            delChannel = interaction.channel
+            # delChannelPerms = interaction.channel.overwrites
+            # delChannelName = interaction.channel.name
+            # delChannelCatagory = interaction.channel.category
+
+            newChannel = await interaction.channel.clone() #type: ignore
+            await delChannel.delete() #type: ignore
+        else:
+            delChannel = discord.utils.get(interaction.guild.channels, name=val) #type: ignore
+
+            newChannel = await delChannel.clone() #type: ignore
+            await delChannel.delete() #type: ignore
+
+            await reply(interaction, f"Cleared {val} channel")
+
+    elif object == "messages":
+        try:
+            await interaction.channel.purge(limit=int(val)) #type: ignore
+            await reply(interaction, "Deleted messages.")
+        except ValueError:
+            await reply(interaction, "Make sure to put the value as an integer more than 0!")
+
+    else:
+        await reply(interaction, f"No object {object} found!")
+
 
 #Making the filter function
 @bot.tree.command(name="filter", description="Change filter settings")
-async def filterfunc(interaction: discord.Interaction, type: str, val: str):
+async def filterfunc(interaction: discord.Interaction, type: str, val: str) -> None:
     global filter
     global banned_words
     global banned_wordsPATH
 
-    owner = interaction.guild.owner
+    owner = interaction.guild.owner.id #type: ignore
 
     if checkIfSettingsChannel(interaction) == False:
-        return
+        await reply(interaction, f"Sorry, YOU **NEED** ELEVATED PRIVILEGES FOR THIS COMMAND!!! _whispers {interaction.user.global_name} is an idiot_")
+        return None
 
-    if interaction.user == owner or discord.utils.get(interaction.user.roles, name="admin"):
+    if interaction.user == owner or discord.utils.get(interaction.user.roles, name="admin"): #type: ignore
         if type.lower() == "on":
             filter = True
             config.set("DEFAULT", "filtering", "True")
@@ -127,7 +178,7 @@ async def filterfunc(interaction: discord.Interaction, type: str, val: str):
                 await interaction.followup.send(f"File not found at current path: {banned_wordsPATH}. Resorting to config.properties re-read. Make sure you have enabled filtering and you may run this command again")
                 banned_wordsPATH = config.get("DEFAULT", "bannedwordsfile", fallback="banned_words.json")
             
-            banned_words.append(val)
+            banned_words.append(val) #type: ignore
 
             with open(banned_wordsPATH, 'w') as f:
                 json.dump(banned_words, f, indent=4)
@@ -135,7 +186,7 @@ async def filterfunc(interaction: discord.Interaction, type: str, val: str):
         elif type.lower() == "remove":
             if val in banned_words:
                 try:
-                    banned_words.remove(val)
+                    banned_words.remove(val) #type: ignore
                     with open(banned_wordsPATH, 'w') as f:
                         json.dump(banned_words, f)
                     
@@ -150,16 +201,21 @@ async def filterfunc(interaction: discord.Interaction, type: str, val: str):
 
         else:
             await reply(interaction, f"No type called {type}")
-    else:
-        print(f"{interaction.user.name}")
+    elif type.lower() != "on" or type.lower() != "off" or type.lower() != "append" or type.lower() != "remove":
+        print(f"{interaction.user.name} is stupid as there is no type called {type}")
 
 #Making the Setup Bot function v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
 async def setup(interaction: discord.Interaction):    
     global owner
     global botMember
-    owner = interaction.guild.owner
+    owner = interaction.guild.owner.id #type: ignore
 
-    botMember = interaction.guild.me
+    botMember = interaction.guild.me #type: ignore
+
+    if int(config.get("DEFAULT", "owner", fallback="0")) != owner:
+        config.set("DEFAULT", "owner", str(owner))
+        with open("config.properties", "w") as conf:
+            config.write(conf)
 
     if checkIfOwner(interaction) == False:
         await reply(interaction, "YOU do NOT enough permissions to run THIS command!")
@@ -168,21 +224,22 @@ async def setup(interaction: discord.Interaction):
     await reply(interaction, "Setting up bot...")
 
 
-    if discord.utils.get(interaction.guild.channels, name='bot-settings'):
+    if discord.utils.get(interaction.guild.channels, name='bot-settings'): #type: ignore
         await interaction.followup.send("Why did you run setup if channel already exists?")
         adminPerms = discord.Permissions(
             permissions=8
         )
 
-        member: discord.member = interaction.user
+        member: discord.member = interaction.user #type: ignore
+
         #If channel is already made, make the admin role
-        adminRoleName = discord.utils.get(interaction.guild.roles, name="admin")
+        adminRoleName = discord.utils.get(interaction.guild.roles, name="admin") #type: ignore
         confAdminRoleID = int(config.get("DEFAULT", "adminRoleID", fallback=0))
         adminRoleID = 0
 
         if confAdminRoleID != 0:
             try:
-                adminRoleID = await interaction.guild.fetch_role(confAdminRoleID)
+                adminRoleID = await interaction.guild.fetch_role(confAdminRoleID) #type: ignore
             except:
                 adminRoleID = 0
         else:
@@ -195,7 +252,7 @@ async def setup(interaction: discord.Interaction):
                 await interaction.followup.send("Actually, it does exist but I don't have the ID, can you delete that admin role and run /setupbot again?")
         else:
             if botMember.guild_permissions.manage_roles == True:
-                adminRole = await interaction.guild.create_role(reason=None, name="admin", permissions=adminPerms)
+                adminRole = await interaction.guild.create_role(reason=None, name="admin", permissions=adminPerms) #type: ignore
                 config.set("DEFAULT", "adminRoleID", str(adminRole.id))
                 with open("config.properties", 'w') as cfg:
                     config.write(cfg)
@@ -207,13 +264,13 @@ async def setup(interaction: discord.Interaction):
 
     #Make the permissions for the settings channel
     perms = {
-        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        interaction.guild.owner: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False), #type: ignore
+        interaction.guild.owner: discord.PermissionOverwrite(read_messages=True, send_messages=True) #type: ignore
     }
 
     #Make the settings channel
-    if interaction.channel.permissions_for(botMember).manage_channels == True:
-        settingsChannel = await interaction.guild.create_text_channel('bot-settings', overwrites=perms)
+    if interaction.channel.permissions_for(botMember).manage_channels == True: #type: ignore
+        settingsChannel = await interaction.guild.create_text_channel('bot-settings', overwrites=perms) #type: ignore
         config.set("DEFAULT", "settingsChannelID", str(settingsChannel.id))
         with open("config.properties", 'w') as cfg:
             config.write(cfg)
@@ -227,13 +284,13 @@ async def setup(interaction: discord.Interaction):
     )
 
     #Make the admin role
-    adminRoleName = discord.utils.get(interaction.guild.roles, name="admin")
+    adminRoleName = discord.utils.get(interaction.guild.roles, name="admin") #type: ignore
     confAdminRoleID = int(config.get("DEFAULT", "adminRoleID", fallback=0))
     adminRoleID = 0
 
     if confAdminRoleID != 0:
         try:
-            adminRoleID = await interaction.guild.fetch_role(confAdminRoleID)
+            adminRoleID = await interaction.guild.fetch_role(confAdminRoleID) #type: ignore
         except:
             adminRoleID = 0
     else:
@@ -246,7 +303,7 @@ async def setup(interaction: discord.Interaction):
             await interaction.followup.send("Actually, it does exist but I don't have the ID, can you delete that admin role and run /setupbot again?")
     else:
         if botMember.guild_permissions.manage_roles == True:
-            adminRole = await interaction.guild.create_role(reason=None, name="admin", permissions=adminPerms)
+            adminRole = await interaction.guild.create_role(reason=None, name="admin", permissions=adminPerms) #type: ignore
             config.set("DEFAULT", "adminRoleID", str(adminRole.id))
             with open("config.properties", 'w') as cfg:
                 config.write(cfg)
@@ -258,9 +315,10 @@ async def setup(interaction: discord.Interaction):
 
 
 #Make the commands
-makeSlashCommand("hello", "Say hi!", hello)
-makeSlashCommand("test", "I HATE YOU discord_example_app!!!", test)
-makeSlashCommand("setupbot", "Set the bot up so that you can destroy it!", setup)
+makeSlashCommand("hello", "Say hi!", hello) #type: ignore
+makeSlashCommand("test", "I HATE YOU discord_example_app!!!", test) #type: ignore
+makeSlashCommand("setupbot", "Set the bot up so that you can destroy it!", setup) #type: ignore
+makeSlashCommand("cleanup", "Cleans up the channel or the number of messages", clear)
 
 #Main stuff
 @bot.event
@@ -269,7 +327,7 @@ async def on_ready():
     try:
         synced = await bot.tree.sync()
         print(f"{len(synced)} commands synced")
-        bot.tree.remove_command("togglefilter")
+        print(f"Commands synced are: {synced}")
     except Exception as e:
         print(f"Error occured when syncing commands: {e}")
 
