@@ -10,15 +10,32 @@ import configparser
 
 #Get values from variables
 
+BOT_TOKEN: str = ""
+PUBLIC_KEY: str = ""
+
 try:
+    open(".env", "r")
     load_dotenv()
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN") #type: ignore
-    PUBLIC_KEY: str = os.getenv("PUBLIC_KEY") #type: ignore
+    BOT_TOKEN = os.getenv("BOT_TOKEN") #type: ignore
+    PUBLIC_KEY = os.getenv("PUBLIC_KEY") #type: ignore
 except FileNotFoundError:
     print("Please add a .env file to the same directory as this and add BOT_TOKEN and PUBLIC_KEY in the .env file.")
-    print("Exiting program due to FileNotFoundError")
-    raise(FileNotFoundError)
+    
+    choice: str = input("Would you like me (this program) to help you make the .env file or just raise FileNotFoundError? Options: 1/2: ")
 
+    if choice == "1":
+        BOT_TOKEN = input("Enter the BOT_TOKEN: ")
+        PUBLIC_KEY = input("Enter the PUBLIC_KEY: ")
+
+        with open(".env", "w") as env:
+            env.write(f'BOT_TOKEN="{BOT_TOKEN}"\n')
+            env.write(f'PUBLIC_KEY="{PUBLIC_KEY}"')
+
+        print("Made .env file successfully!")
+    else:
+        print("Exiting program due to FileNotFoundError")
+        raise(FileNotFoundError)
+    
 #Define Intents
 intents = discord.Intents.default()
 intents.members = True
