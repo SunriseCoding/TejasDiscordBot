@@ -16,6 +16,20 @@ global PUBLIC_KEY
 BOT_TOKEN: str = ""
 PUBLIC_KEY: str = ""
 
+# Make sure banned_words.json exists
+try:
+    open("banned_words.json", "r")
+except FileNotFoundError:
+    with open("banned_words.json", "w") as ban:
+        ban.write("")
+
+# Make sure config.properties exists
+try:
+    open("config.properties", "r")
+except FileNotFoundError:
+    with open("config.properties", "w") as conf:
+        conf.write("")
+
 try:
     open(".env", "r")
     load_dotenv()
@@ -52,12 +66,14 @@ async def reply(interaction: discord.Interaction, text: str, ephemeral: bool = F
         await interaction.followup.send(text, ephemeral=ephemeral)
         return None
     
+# Check if owner function
 def checkIfOwner(interaction: discord.Interaction) -> bool:
     if interaction.user.id == interaction.guild.owner.id: #type: ignore
         return True
     else:
         return False
-    
+
+# Check if allowed function
 async def checkIfAllowed(interaction: discord.Interaction) -> bool:
     guildID = interaction.guild_id
     adminRoleID: int = int(config.get(str(guildID), "adminRoleID", fallback="0"))
@@ -76,11 +92,23 @@ async def checkIfAllowed(interaction: discord.Interaction) -> bool:
         return True
     else:
         return False
+    
+# Check if the channel is the settings channel
+def checkIfSettingsChannel(interaction: discord.Interaction) -> bool:
+    if interaction.channel_id == int(config.get(str(interaction.guild_id), "botsettingschannel", fallback="0")):
+        return True
+    else:
+        return False
 
 # Setup command
 @bot.tree.command(name="setup", description="Setup the bot")
 @commands.has_permissions(administrator=True)
 async def setup(interaction: discord.Interaction) -> None:
+    try: 
+        interaction.guild.id #type: ignore
+    except AttributeError:
+        await reply(interaction, "This is a server only command")
+    
     await interaction.response.defer(thinking=True, ephemeral=False)
 
     botMember = interaction.guild.me #type: ignore
@@ -166,6 +194,18 @@ async def setup(interaction: discord.Interaction) -> None:
 
         await reply(interaction, "Successfully added the bot-settings channel to the settings of this guild", True)
 
+        await reply(interaction, "Initializing the filter section...", True)
+
+        banned_words: dict = {}
+
+        with open("banned_words.json", "r") as f:
+            banned_words = json.load(f)
+
+        banned_words[str(interaction.guild_id)] = []
+
+        with open("banned_words.json", "w") as f:
+            json.dump(banned_words, f)
+
         await reply(interaction, "Setup finished!", True)
 
         return None
@@ -182,6 +222,11 @@ async def setup(interaction: discord.Interaction) -> None:
 # Cleanup command
 @bot.tree.command(name="cleanup", description="Cleans up messages or the channel")
 async def cleanup(interaction: discord.Interaction, object: str, val: str = "0") -> None:
+    try: 
+        interaction.guild.id #type: ignore
+    except AttributeError:
+        await reply(interaction, "This is a server only command")
+    
     await interaction.response.defer(thinking=True, ephemeral=False)
 
     if object == "messages":
@@ -206,7 +251,7 @@ async def cleanup(interaction: discord.Interaction, object: str, val: str = "0")
     elif object == "channel" or object == "channels":
         if checkIfOwner(interaction) == True:
             if val == "~":
-                if interaction.channel.id == config.get(str(interaction.guild_id), "botsettingschannel"): #type: ignore
+                if interaction.channel.id == int(config.get(str(interaction.guild_id), "botsettingschannel")): #type: ignore
                     await reply(interaction, "Can't delete that channel!")
                     return None
 
@@ -247,9 +292,91 @@ async def cleanup(interaction: discord.Interaction, object: str, val: str = "0")
         return None
     
 @bot.tree.command(name="filter", description="Filter the messages sent by players (WIP)")
-async def filter(interaction: discord.Interaction, object: str, val: str) -> None:
-    await reply(interaction, "This command will be added in a later update, sorry for the inconvienience!")
-    return None
+async def filter(interaction: discord.Interaction, object: str, val: str = "0") -> None:
+    #await reply(interaction, "This command will be added in a later update, sorry for the inconvienience!")
+    await interaction.response.defer(thinking=True)
+
+    try: 
+        interaction.guild.id #type: ignore
+    except AttributeError:
+        await reply(interaction, "This is a server only command")
+
+    if await checkIfAllowed(interaction) == False:
+        await reply(interaction, "You are not eligible to use this command", True)
+        return None
+    
+    if checkIfSettingsChannel(interaction) == False:
+        await reply(interaction, "Please run this command on the bot-settings channel", True)
+        return None
+    
+    if object == "on":
+        config.set(str(interaction.guild_id), "filter", "True")
+
+        with open("config.properties", "w") as conf:
+            config.write(conf)
+
+        await reply(interaction, "Filter in now on")
+        return None
+    elif object == "off":
+        config.set(str(interaction.guild_id), "filter", "False")
+
+        with open("config.properties") as conf:
+            config.write(conf)
+
+        await reply(interaction, "Filter in now off")
+        return None
+    elif object == "append":
+        banned_words: dict = {}
+        with open("banned_words.json", "r") as f:
+            banned_words = json.load(f)
+
+        try:
+            banned_words[str(interaction.guild_id)].append(val)
+        except KeyError:
+            await reply(interaction, "An error occured, aborting...")
+            await reply(interaction, "Tip: run the ```/setup``` command if you haven't")
+
+            return None
+
+        with open("banned_words.json", "w") as f:
+            json.dump(banned_words, f)
+            
+        await reply(interaction, f"Appended {val} to banned_words.json")
+        return None
+    elif object == "remove":
+        banned_words: dict = {}
+        with open("banned_words.json", "r") as f:
+            banned_words = json.load(f)
+
+        try:
+            banned_words[str(interaction.guild_id)].pop(banned_words[str(interaction.guild_id)].index(val))
+        except ValueError or KeyError:
+            await reply(interaction, "An error occured, aborting...")
+            await reply(interaction, f"Tip: run the ```/setup``` command if you haven't or make sure that {val} exists in the banned_words list")
+
+            return None
+
+        with open("banned_words.json", "w") as f:
+            json.dump(banned_words, f)
+            
+        await reply(interaction, f"Removed {val} from banned_words.json")
+        return None
+    elif object == "list":
+        banned_words: dict = {}
+        with open("banned_words.json", "r") as f:
+            banned_words = json.load(f)
+
+        try:
+            bannedWords: list = banned_words[str(interaction.guild_id)]
+            await reply(interaction, f"All the banned_words are: {bannedWords}")
+            return None
+        except KeyError:
+            await reply(interaction, "An error occured, aborting...")
+            await reply(interaction, "Tip: run the /setup command if you haven't")
+            return None
+    else:
+        await reply(interaction, f"No object named {val} found.")
+        return None
 
 @bot.tree.command(name="hello", description="Say hello!")
 async def hello(interaction: discord.Interaction) -> None:
@@ -260,6 +387,50 @@ async def hello(interaction: discord.Interaction) -> None:
 async def test(interaction: discord.Interaction) -> None:
     await reply(interaction, "If I remove this command from the code, the bot will break!")
     return None
+
+@bot.event
+async def on_message(message: discord.Message) -> None:
+    if message.author == bot.user:
+        return None
+    
+    try:
+        message.guild.id #type: ignore
+    except AttributeError:
+        await message.reply("Hey, how are you? I am Tejas#9286 and I am a server management bot! \nUnfortunately, I am **NOT** an AI so I can't chat with you, so this is my default response to dms! :)")
+        return None
+    
+    channel = message.channel
+
+    if message.author == bot.user:
+        return None
+    
+    if config.get(str(message.guild.id), "filter") == "False": #type: ignore
+        await bot.process_commands(message)
+        return None
+    
+    banned_words: list = []
+    with open("banned_words.json", "r") as f:
+        entireBanned_Words = json.load(f)
+
+        try:
+            banned_words = entireBanned_Words[str(message.guild.id)] #type: ignore
+        except KeyError:
+            await bot.process_commands(message)
+            print("KeyError")
+            return None
+        
+    for word in banned_words:
+        if word.lower() in message.content.lower():
+            await message.reply("Can't send that message!")
+            await message.delete()
+
+            break
+            #await channel.send("Can't send that message")
+        else:
+            asyncio.timeout(0.01)
+
+    await bot.process_commands(message)
+    
 
 @bot.event
 async def on_ready() -> None:

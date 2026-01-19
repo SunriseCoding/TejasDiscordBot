@@ -1,3 +1,7 @@
 .env
 
 config.properties
+
+oldBotCode.py
+
+banned_words.json
