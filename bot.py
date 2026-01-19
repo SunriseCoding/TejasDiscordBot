@@ -416,7 +416,6 @@ async def on_message(message: discord.Message) -> None:
             banned_words = entireBanned_Words[str(message.guild.id)] #type: ignore
         except KeyError:
             await bot.process_commands(message)
-            print("KeyError")
             return None
         
     for word in banned_words:
